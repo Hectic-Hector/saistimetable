@@ -53,11 +53,13 @@
     "teacherAvailability": {
       "Samuel": { "availableDays": ["Tuesday", "Thursday"] },
       "Gifty": { "availableDays": ["Tuesday", "Thursday"] },
-      "Ms. Gillian": { "availableDays": ["Tuesday", "Thursday"] }
+      "Ms. Gillian": { "availableDays": ["Tuesday", "Thursday"] },
+      "Miss Ruth Lartey": { "availableDays": ["Monday", "Tuesday", "Wednesday", "Thursday"] }
     },
     "subjectRestrictions": {
       "PSHE": { "days": ["Tuesday", "Thursday"] },
-      "Robotics": { "days": ["Tuesday", "Thursday"] }
+      "Robotics": { "days": ["Tuesday", "Thursday"] },
+      "P.E.": { "days": ["Monday", "Tuesday", "Wednesday", "Thursday"] }
     },
     "peSynchronization": [
       ["1A", "1B"],
