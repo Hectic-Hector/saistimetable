@@ -11,8 +11,8 @@ class TimetableGenerator {
     generate() {
         console.log("Generator: Starting timetable generation process...");
         this._initialize();
+        this._schedulePESynchronization(); // <-- PE scheduled first
         this._scheduleRestrictedSubjects();
-        this._schedulePESynchronization();
         this._scheduleICTLessons();
         this._scheduleStrictDoubles();
         this._scheduleRemainingLessons();
@@ -183,17 +183,8 @@ class TimetableGenerator {
                 if (this._scheduleSpecificPeriods(lesson, allowedDays, 2)) {
                     periodsToSchedule -= 2;
                 } else {
-                    // Try as two singles if no double found, but for strict:true, most likely you want only doubles
-                    let singlesScheduled = 0;
-                    for (let s = 0; s < 2; s++) {
-                        if (this._scheduleSpecificPeriods(lesson, allowedDays, 1)) {
-                            periodsToSchedule -= 1;
-                            singlesScheduled++;
-                        }
-                    }
-                    if (singlesScheduled < 2) {
-                        this.unassignedLessons.push({ className, subject, reason: "Could not find slot for double period or singles" });
-                    }
+                    // For strict:true, do NOT schedule singles; leave them unassigned
+                    this.unassignedLessons.push({ className, subject, reason: "Strict double-period subject: Could not find slot for double period." });
                 }
             }
             // If any periods remain (odd number), for strict:true, do not schedule singles
@@ -305,14 +296,14 @@ class TimetableGenerator {
 
     // --- SCHEDULING ORDER ---
     _scheduleRestrictedSubjects() {
-        console.log("Generator Step 1: Scheduling strictly restricted subjects...");
+        console.log("Generator Step 2: Scheduling strictly restricted subjects...");
         Object.entries(this.constraints.subjectRestrictions).forEach(([subject, rule]) => {
             this._scheduleAllForSubject(subject, rule.days);
         });
     }
 
     _schedulePESynchronization() {
-        console.log("Generator Step 2: Scheduling synchronized P.E. lessons...");
+        console.log("Generator Step 1: Scheduling synchronized P.E. lessons...");
         this.constraints.peSynchronization.forEach(group => {
             const subject = "P.E.";
             const needed = this.schoolData.subjects[this._getClassDivision(group[0])][subject];
@@ -360,13 +351,18 @@ class TimetableGenerator {
 
     _scheduleStrictDoubles() {
         console.log("Generator Step 4: Scheduling remaining strict double periods...");
-        this.constraints.doublePeriodSubjects.filter(r => r.strict).forEach(rule => this._scheduleAllForSubject(rule.subject));
+        this.constraints.doublePeriodSubjects.filter(r => r.strict).forEach(rule => {
+            // Exclude PE since it is already scheduled
+            if (rule.subject !== "P.E.") this._scheduleAllForSubject(rule.subject);
+        });
     }
 
     _scheduleRemainingLessons() {
         console.log("Generator Step 5: Scheduling all remaining lessons...");
         const allSubjects = [...new Set(Object.values(this.schoolData.subjects).flatMap(div => Object.keys(div)))];
-        allSubjects.sort(() => Math.random() - 0.5).forEach(subject => this._scheduleAllForSubject(subject));
+        allSubjects.sort(() => Math.random() - 0.5).forEach(subject => {
+            if (subject !== "P.E.") this._scheduleAllForSubject(subject);
+        });
     }
 
     _scheduleAllForSubject(subject, allowedDays = this.schoolData.days) {
