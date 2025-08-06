@@ -185,7 +185,7 @@
       },
       "6A": {
         "Math": "Mr. Ofori",
-        "English": "Ama Kwatsewaa",
+        "English": "Joana",
         "Science": "Ama Kwatsewaa",
         "French": "Mr. James Tettey",
         "Humanities": "Sebastian",
@@ -200,7 +200,7 @@
       },
       "6B": {
         "Math": "Mr. Ofori",
-        "English": "Ama Kwatsewaa",
+        "English": "Joana",
         "Science": "Ama Kwatsewaa",
         "French": "Mr. James Tettey",
         "Humanities": "Sebastian",
@@ -237,11 +237,13 @@
     "teacherAvailability": {
       "Samuel": { "availableDays": ["Tuesday", "Thursday"] },
       "Gifty": { "availableDays": ["Tuesday", "Thursday"] },
-      "Mrs. Gillian": { "availableDays": ["Tuesday", "Thursday"] }
+      "Mrs. Gillian": { "availableDays": ["Tuesday", "Thursday"] },
+      "Mrs. Ruth Lartey":{"availableDays": ["Monday", "Tuesday", "Wednesday", "Thursday"]}
     },
     "subjectRestrictions": {
       "PSHE": { "days": ["Tuesday", "Thursday"] },
-      "Robotics": { "days": ["Tuesday", "Thursday"] }
+      "Robotics": { "days": ["Tuesday", "Thursday"] },
+      "P.E": { "days": ["Monday", "Tuesday", "Wednesday", "Thursday"] }
     },
     "peSynchronization": [
       ["1A", "1B"],
