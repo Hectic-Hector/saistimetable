@@ -30,7 +30,7 @@
     "subjects": {
       "lowerPrimary": { "Math": 8, "English": 8, "Science": 4, "French": 4, "Humanities": 3, "ICT": 3, "BK": 2, "Robotics": 2, "P.E.": 2, "Art": 2, "Music": 2, "Library": 1, "PSHE": 1 },
       "upperPrimary": { "Math": 8, "English": 8, "Science": 4, "French": 4, "Humanities": 3, "ICT": 3, "BK": 2, "Robotics": 2, "P.E.": 2, "Art": 2, "Music": 2, "Library": 1, "PSHE": 1 },
-      "lowerSecondary": { "Math": 6, "English": 6, "French": 6, "Chemistry": 4, "Physics": 4, "Biology": 4, "Literature": 4, "ICT": 3, "Geography": 3, "History": 3, "Art": 2, "Robotics": 2, "P.E.": 1, "Library": 1 }
+      "lowerSecondary": { "Math": 6, "English": 6, "French": 6, "Chemistry": 4, "Physics": 4, "Biology": 4, "Literature": 4, "ICT": 3, "Geography": 3, "History": 3, "Art": 2, "Robotics": 2, "P.E.": 1, "Library": 1, "PSHE": 1 }
     },
     "teachers": {
       "1A": {
