@@ -53,13 +53,11 @@
     "teacherAvailability": {
       "Samuel": { "availableDays": ["Tuesday", "Thursday"] },
       "Gifty": { "availableDays": ["Tuesday", "Thursday"] },
-      "Ms. Gillian": { "availableDays": ["Tuesday", "Thursday"] },
-      "Miss Ruth Lartey": { "availableDays": ["Monday", "Tuesday", "Wednesday", "Thursday"] }
+      "Ms. Gillian": { "availableDays": ["Tuesday", "Thursday"] }
     },
     "subjectRestrictions": {
       "PSHE": { "days": ["Tuesday", "Thursday"] },
-      "Robotics": { "days": ["Tuesday", "Thursday"] },
-      "P.E.": { "days": ["Monday", "Tuesday", "Wednesday", "Thursday"] }
+      "Robotics": { "days": ["Tuesday", "Thursday"] }
     },
     "peSynchronization": [
       ["1A", "1B"],
@@ -77,17 +75,14 @@
       { "subject": "English", "divisions": ["lowerPrimary", "upperPrimary"], "strict": "mixed", "structure": { "doubles": 3, "singles": 2 } },
       { "subject": "French", "divisions": ["lowerPrimary", "upperPrimary"], "strict": "mixed", "structure": { "doubles": 1, "singles": 2 } },
       { "subject": "Science", "divisions": ["lowerPrimary", "upperPrimary"], "strict": "mixed", "structure": { "doubles": 1, "singles": 2 } },
+      { "subject": "P.E.", "divisions": ["lowerPrimary", "upperPrimary"], "strict": true, "structure": { "doubles": 1, "singles": 0 } },
       { "subject": "Math", "divisions": ["lowerSecondary"], "strict": "mixed", "structure": { "doubles": 2, "singles": 2 } },
       { "subject": "English", "divisions": ["lowerSecondary"], "strict": "mixed", "structure": { "doubles": 2, "singles": 2 } },
       { "subject": "French", "divisions": ["lowerSecondary"], "strict": "mixed", "structure": { "doubles": 2, "singles": 2 } },
-      { "subject": "Chemistry", "divisions": ["lowerSecondary"], "strict": "mixed", "structure": { "doubles": 1, "singles": 2 } },
-      { "subject": "Physics", "divisions": ["lowerSecondary"], "strict": "mixed", "structure": { "doubles": 1, "singles": 2 } },
-      { "subject": "Biology", "divisions": ["lowerSecondary"], "strict": "mixed", "structure": { "doubles": 1, "singles": 2 } },
       { "subject": "Music", "divisions": ["lowerPrimary", "upperPrimary"], "strict": true },
       { "subject": "Art", "divisions": ["lowerPrimary", "upperPrimary"], "strict": true },
       { "subject": "Art", "divisions": ["lowerSecondary"], "strict": "mixed", "structure": { "doubles": 1, "singles": 1 } },
-      { "subject": "ICT", "divisions": ["lowerPrimary", "upperPrimary", "lowerSecondary"], "strict": "mixed", "structure": { "doubles": 1, "singles": 1 } },
-      { "subject": "P.E.", "divisions": ["lowerPrimary", "upperPrimary"], "strict": true }
+      { "subject": "ICT", "divisions": ["lowerPrimary", "upperPrimary", "lowerSecondary"], "strict": "mixed", "structure": { "doubles": 1, "singles": 1 } }
     ],
     "workloadLimits": {
       "maxClassPeriodsPerDay": 2,
