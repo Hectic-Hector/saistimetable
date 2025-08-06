@@ -11,11 +11,22 @@ class TimetableGenerator {
     generate() {
         console.log("Generator: Starting timetable generation process...");
         this._initialize();
-        this._scheduleRestrictedSubjects();
+
+        // NEW: Schedule sync lessons FIRST (P.E. sync)
         this._schedulePESynchronization();
-        this._scheduleICTLessons();
+
+        // NEW: Schedule strict double subjects SECOND
         this._scheduleStrictDoubles();
+
+        // NEW: Schedule strictly restricted subjects THIRD
+        this._scheduleRestrictedSubjects();
+
+        // ICT after restricted subjects (single resource, but not as strict as others)
+        this._scheduleICTLessons();
+
+        // All remaining lessons LAST
         this._scheduleRemainingLessons();
+
         console.log(`Generator: Process complete. ${this.unassignedLessons.length} unassigned lesson groups.`);
         this._printTeacherStats();
         return this.timetables;
@@ -298,15 +309,9 @@ class TimetableGenerator {
     }
 
     // --- SCHEDULING ORDER ---
-    _scheduleRestrictedSubjects() {
-        console.log("Generator Step 1: Scheduling strictly restricted subjects...");
-        Object.entries(this.constraints.subjectRestrictions || {}).forEach(([subject, rule]) => {
-            this._scheduleAllForSubject(subject, rule.days);
-        });
-    }
-
+    // 1. P.E. synchronization
     _schedulePESynchronization() {
-        console.log("Generator Step 2: Scheduling synchronized P.E. lessons...");
+        console.log("Generator Step 1: Scheduling synchronized P.E. lessons...");
         (this.constraints.peSynchronization || []).forEach(group => {
             const subject = "P.E.";
             const division = this._getClassDivision(group[0]);
@@ -326,16 +331,27 @@ class TimetableGenerator {
         });
     }
 
-    _scheduleICTLessons() {
-        console.log("Generator Step 3: Scheduling ICT lessons (single resource)...");
-        this._scheduleAllForSubject("ICT");
-    }
-
+    // 2. Strict doubles
     _scheduleStrictDoubles() {
-        console.log("Generator Step 4: Scheduling remaining strict double periods...");
+        console.log("Generator Step 2: Scheduling remaining strict double periods...");
         (this.constraints.doublePeriodSubjects || []).filter(r => r.strict).forEach(rule => this._scheduleAllForSubject(rule.subject));
     }
 
+    // 3. Strictly restricted subjects (e.g. Robotics, PSHE)
+    _scheduleRestrictedSubjects() {
+        console.log("Generator Step 3: Scheduling strictly restricted subjects...");
+        Object.entries(this.constraints.subjectRestrictions || {}).forEach(([subject, rule]) => {
+            this._scheduleAllForSubject(subject, rule.days);
+        });
+    }
+
+    // 4. ICT single resource
+    _scheduleICTLessons() {
+        console.log("Generator Step 4: Scheduling ICT lessons (single resource)...");
+        this._scheduleAllForSubject("ICT");
+    }
+
+    // 5. All remaining subjects
     _scheduleRemainingLessons() {
         console.log("Generator Step 5: Scheduling all remaining lessons...");
         const allSubjects = [...new Set(Object.values(this.schoolData.subjects || {}).flatMap(div => Object.keys(div)))];
