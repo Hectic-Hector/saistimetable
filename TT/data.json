@@ -86,7 +86,8 @@
       { "subject": "Music", "divisions": ["lowerPrimary", "upperPrimary"], "strict": true },
       { "subject": "Art", "divisions": ["lowerPrimary", "upperPrimary"], "strict": true },
       { "subject": "Art", "divisions": ["lowerSecondary"], "strict": "mixed", "structure": { "doubles": 1, "singles": 1 } },
-      { "subject": "ICT", "divisions": ["lowerPrimary", "upperPrimary", "lowerSecondary"], "strict": "mixed", "structure": { "doubles": 1, "singles": 1 } }
+      { "subject": "ICT", "divisions": ["lowerPrimary", "upperPrimary", "lowerSecondary"], "strict": "mixed", "structure": { "doubles": 1, "singles": 1 } },
+      { "subject": "P.E.", "divisions": ["lowerPrimary", "upperPrimary"], "strict": true }
     ],
     "workloadLimits": {
       "maxClassPeriodsPerDay": 2,
