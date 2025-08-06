@@ -106,6 +106,33 @@ class TimetableGenerator {
 
         if (this._countSubjectOnDay(className, subject, day) >= workloadLimits.maxClassPeriodsPerDay) return { valid: false, reason: `Subject max daily load` };
 
+        // Prevent subject splits on a day: multiple periods of same subject must be consecutive, except allowed to be split by break/lunch
+        const scheduledSlots = Object.entries(this.timetables[className][day])
+            .filter(([_, l]) => l.subject === subject)
+            .map(([slot, _]) => parseInt(slot));
+        if (scheduledSlots.length > 0) {
+            const division = this._getClassDivision(className);
+            const { breakPeriod, lunchPeriod } = this.schoolData.divisionSchedules[division];
+            const minSlot = Math.min(...scheduledSlots);
+            const maxSlot = Math.max(...scheduledSlots);
+
+            // Allowed positions: directly before or after, or separated by break/lunch
+            const allowedSeparators = [breakPeriod, lunchPeriod];
+
+            const isAllowed =
+                (slot === minSlot - 1) ||
+                (slot === maxSlot + 1) ||
+                (allowedSeparators.includes(slot) &&
+                 (scheduledSlots.includes(slot - 1) || scheduledSlots.includes(slot + 1))) ||
+                (scheduledSlots.some(s =>
+                    allowedSeparators.includes(Math.abs(slot - s)) && Math.abs(slot - s) === 2
+                ));
+
+            if (!isAllowed) {
+                return { valid: false, reason: "Subject split: non-consecutive periods for same subject on same day are not allowed unless separated by break/lunch." };
+            }
+        }
+
         const availabilityRule = teacherAvailability[teacher];
         if (availabilityRule) {
             if (availabilityRule.availableDays && !availabilityRule.availableDays.includes(day)) return { valid: false, reason: `Teacher only available on ${availabilityRule.availableDays.join()}` };
@@ -281,13 +308,28 @@ class TimetableGenerator {
 
             for (let i = 0; i <= slots.length - numPeriods; i++) {
                 const slotsToTry = slots.slice(i, i + numPeriods);
-                // For double periods, ensure consecutive slots
-                if (numPeriods === 2 && slotsToTry[1] - slotsToTry[0] !== 1) continue;
-
-                const canAssignAll = group.every(c => slotsToTry.every(s => this.canAssignLesson(c, subject, teacher, day, s).valid));
-                if (canAssignAll) {
-                    group.forEach(c => slotsToTry.forEach(s => this.assignLesson(c, subject, teacher, day, s)));
-                    return true;
+                // For double periods, ensure consecutive slots or split by break/lunch
+                if (numPeriods === 2) {
+                    // Check consecutive
+                    if (slotsToTry[1] - slotsToTry[0] === 1) {
+                        const canAssignAll = group.every(c => slotsToTry.every(s => this.canAssignLesson(c, subject, teacher, day, s).valid));
+                        if (canAssignAll) {
+                            group.forEach(c => slotsToTry.forEach(s => this.assignLesson(c, subject, teacher, day, s)));
+                            return true;
+                        }
+                        continue;
+                    }
+                    // Check split by break/lunch
+                    const division = this._getClassDivision(group[0]);
+                    const { breakPeriod, lunchPeriod } = this.schoolData.divisionSchedules[division];
+                    const midSlot = slotsToTry[0] + 1;
+                    if (slotsToTry[1] - slotsToTry[0] === 2 && (midSlot === breakPeriod || midSlot === lunchPeriod)) {
+                        const canAssignAll = group.every(c => slotsToTry.every(s => this.canAssignLesson(c, subject, teacher, day, s).valid));
+                        if (canAssignAll) {
+                            group.forEach(c => slotsToTry.forEach(s => this.assignLesson(c, subject, teacher, day, s)));
+                            return true;
+                        }
+                    }
                 }
             }
         }
