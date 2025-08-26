@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const regenerateBtn = document.getElementById('regenerate-btn');
 
     function getClassDivision(className) {
+        // Update if your class naming changes, but this matches timetable-generator.js
         const year = parseInt(className[0]);
         if (year <= 3) return "lowerPrimary";
         if (year <= 6) return "upperPrimary";
@@ -35,8 +36,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const subjectColors = {};
-    const colorPalette = [ '#1abc9c', '#2ecc71', '#3498db', '#9b59b6', '#34495e', '#f1c40f', '#e67e22', '#e74c3c', '#95a5a6', '#16a085', '#27ae60', '#2980b9', '#8e44ad', '#2c3e50', '#f39c12', '#d35400', '#c0392b', '#7f8c8d' ];
-    function getSubjectColor(str) { if (!subjectColors[str]) { let hash = 0; for (let i = 0; i < str.length; i++) { hash = str.charCodeAt(i) + ((hash << 5) - hash); } hash = Math.abs(hash); subjectColors[str] = colorPalette[hash % colorPalette.length]; } return subjectColors[str]; }
+    const colorPalette = [
+        '#1abc9c', '#2ecc71', '#3498db', '#9b59b6', '#34495e',
+        '#f1c40f', '#e67e22', '#e74c3c', '#95a5a6', '#16a085',
+        '#27ae60', '#2980b9', '#8e44ad', '#2c3e50', '#f39c12',
+        '#d35400', '#c0392b', '#bdc3c7', '#7f8c8d'
+    ];
+    function getSubjectColor(str) {
+        if (!subjectColors[str]) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            hash = Math.abs(hash);
+            subjectColors[str] = colorPalette[hash % colorPalette.length];
+        }
+        return subjectColors[str];
+    }
     
     function renderClassTimetable(className) {
         if (!timetables[className] || !schoolData.periods) {
@@ -49,8 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const table = document.createElement('table');
         table.className = 'timetable-grid';
     
-        // **FIXED RENDER LOGIC**
-        // Determine the last period of the day for this division from the data, not a hardcoded number.
+        // Dynamic period range: include all lesson slots, break and lunch (based on division schedule)
         const divisionSlots = schoolData.divisionSchedules[division].lessonSlots;
         const breakAndLunch = [schoolData.divisionSchedules[division].breakPeriod, schoolData.divisionSchedules[division].lunchPeriod];
         const allDayPeriods = [...divisionSlots, ...breakAndLunch];
@@ -76,10 +91,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cell = row.insertCell();
                 const lessonData = classTimetable[day]?.[period.id];
                 
+                // Find special event for this period, division, and day
                 const specialEvent = schoolData.specialEvents.find(event => 
                     event.day === day &&
-                    (event.periodId === period.id || (event.periodIds && event.periodIds.includes(period.id))) &&
-                    (event.appliesTo === 'all' || event.appliesTo.includes(division))
+                    (
+                        (event.periodId === period.id) ||
+                        (event.periodIds && event.periodIds.includes(period.id))
+                    ) &&
+                    (
+                        event.appliesTo === 'all' ||
+                        (Array.isArray(event.appliesTo) && event.appliesTo.includes(division))
+                    )
                 );
     
                 const periodType = getPeriodType(division, period.id);
@@ -125,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const table = document.createElement('table');
         table.className = 'timetable-grid';
     
-        // Show all possible periods for a teacher's view to see their full day
+        // Show all possible periods for a teacher's view to see their full day (excluding arrival)
         const displayPeriods = schoolData.periods.filter(p => p.type !== 'arrival');
         const thead = table.createTHead();
         const headerRow = thead.insertRow();
@@ -146,9 +168,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cell = row.insertCell();
                 const lessonData = teacherData[day]?.[period.id];
     
+                // Only show special event if it applies to "all" (since we don't know division here)
                 const specialEvent = schoolData.specialEvents.find(event =>
                     event.day === day &&
-                    (event.periodId === period.id || (event.periodIds && event.periodIds.includes(period.id)))
+                    (
+                        (event.periodId === period.id) ||
+                        (event.periodIds && event.periodIds.includes(period.id))
+                    ) &&
+                    (event.appliesTo === 'all')
                 );
     
                 if (lessonData) {
@@ -190,10 +217,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (unassigned.length > 0) {
             statusMessageContainer.className = 'status-warning';
             let message = `<strong>Generation Complete with Warnings:</strong> Some lessons could not be scheduled.<ul>`;
+            // Group by class/subject, show reason and count
             const grouped = unassigned.reduce((acc, item) => {
                 const key = `${item.className || item.classGroup} - ${item.subject}`;
                 if (!acc[key]) acc[key] = { count: 0, reason: item.reason };
-                acc[key].count++;
+                acc[key].count += (item.periodsRemaining || 1);
                 return acc;
             }, {});
             for (const [key, { count, reason }] of Object.entries(grouped)) {
@@ -225,12 +253,14 @@ document.addEventListener('DOMContentLoaded', () => {
             classSelector.appendChild(option);
         });
 
+        // Teachers are now unique, possibly with part-time tag from constraints
         const teacherSet = new Set(Object.values(schoolData.teachers).flatMap(obj => Object.values(obj)));
         allTeachers = Array.from(teacherSet).sort();
         allTeachers.forEach(teacherName => {
             const option = document.createElement('option');
             option.value = teacherName;
-            option.textContent = constraints.partTimeTeachers.includes(teacherName) ? `${teacherName} (Part-time)` : teacherName;
+            option.textContent = constraints.partTimeTeachers && constraints.partTimeTeachers.includes(teacherName)
+                ? `${teacherName} (Part-time)` : teacherName;
             teacherSelector.appendChild(option);
         });
     }
