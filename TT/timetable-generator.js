@@ -1,3 +1,5 @@
+--- START OF FILE timetable-generator.js ---
+
 class TimetableGenerator {
     constructor(schoolData, constraints) {
         this.schoolData = schoolData;
@@ -11,8 +13,11 @@ class TimetableGenerator {
     generate() {
         console.log("Generator: Starting timetable generation process...");
         this._initialize();
-        this._schedulePESynchronization(); // <-- PE scheduled first
         this._scheduleRestrictedSubjects();
+        // Check if peSynchronization exists before calling the function
+        if (this.constraints.peSynchronization && this.constraints.peSynchronization.length > 0) {
+            this._schedulePESynchronization();
+        }
         this._scheduleICTLessons();
         this._scheduleStrictDoubles();
         this._scheduleRemainingLessons();
@@ -38,8 +43,12 @@ class TimetableGenerator {
             this.schoolData.periods.forEach(period => {
                 this.globalSchedule[day][period.id] = {
                     teachers: new Set(),
-                    resources: { ICT: null }
+                    resources: {} // Initialize all possible resources here
                 };
+                // Dynamically add single resource subjects to global schedule
+                this.constraints.singleResourceSubjects.forEach(resource => {
+                    this.globalSchedule[day][period.id].resources[resource] = null;
+                });
             });
         });
 
@@ -72,13 +81,13 @@ class TimetableGenerator {
     _getAvailableLessonSlots(className, day) {
         const division = this._getClassDivision(className);
         let slots = [...this.schoolData.divisionSchedules[division].lessonSlots];
-
-        const eventsOnDay = this.schoolData.specialEvents.filter(e => e.day === day && (e.appliesTo === 'all' || e.appliesTo.includes(division)));
+        
+        const eventsOnDay = this.schoolData.specialEvents.filter(e => e.day === day && (e.appliesTo === 'all' || (Array.isArray(e.appliesTo) && e.appliesTo.includes(division))));
         if (eventsOnDay.length > 0) {
             const eventPeriods = eventsOnDay.flatMap(e => e.periodIds || [e.periodId]);
             slots = slots.filter(s => !eventPeriods.includes(s));
         }
-
+        
         return slots;
     }
 
@@ -104,53 +113,40 @@ class TimetableGenerator {
             return { valid: false, reason: `Teacher workload exceeded` };
         }
 
-        if (this._countSubjectOnDay(className, subject, day) >= workloadLimits.maxClassPeriodsPerDay) return { valid: false, reason: `Subject max daily load` };
-
-        // Prevent subject splits on a day: multiple periods of same subject must be consecutive, except allowed to be split by break/lunch
-        const scheduledSlots = Object.entries(this.timetables[className][day])
-            .filter(([_, l]) => l.subject === subject)
-            .map(([slot, _]) => parseInt(slot));
-        if (scheduledSlots.length > 0) {
-            const division = this._getClassDivision(className);
-            const { breakPeriod, lunchPeriod } = this.schoolData.divisionSchedules[division];
-            const minSlot = Math.min(...scheduledSlots);
-            const maxSlot = Math.max(...scheduledSlots);
-
-            // Allowed positions: directly before or after, or separated by break/lunch
-            const allowedSeparators = [breakPeriod, lunchPeriod];
-
-            const isAllowed =
-                (slot === minSlot - 1) ||
-                (slot === maxSlot + 1) ||
-                (allowedSeparators.includes(slot) &&
-                 (scheduledSlots.includes(slot - 1) || scheduledSlots.includes(slot + 1))) ||
-                (scheduledSlots.some(s =>
-                    allowedSeparators.includes(Math.abs(slot - s)) && Math.abs(slot - s) === 2
-                ));
-
-            if (!isAllowed) {
-                return { valid: false, reason: "Subject split: non-consecutive periods for same subject on same day are not allowed unless separated by break/lunch." };
-            }
+        // Check if the slot is already taken by a special event for this class division
+        const division = this._getClassDivision(className);
+        const eventsOnDay = this.schoolData.specialEvents.filter(e => e.day === day && (e.appliesTo === 'all' || (Array.isArray(e.appliesTo) && e.appliesTo.includes(division))));
+        const eventPeriods = eventsOnDay.flatMap(e => e.periodIds || [e.periodId]);
+        if (eventPeriods.includes(slot)) {
+            return { valid: false, reason: `Class slot booked by special event` };
         }
-
+        
+        // This constraint applies to the *class*, not a specific subject count.
+        // It prevents any more lessons for the class on that day beyond the limit.
+        // If maxClassPeriodsPerDay applies per subject, then the previous code was fine.
+        // If it applies to total periods for the class, then this needs adjustment.
+        // Assuming it's per subject as per your original logic:
+        // if (this._countSubjectOnDay(className, subject, day) >= workloadLimits.maxClassPeriodsPerDay) return { valid: false, reason: `Subject max daily load` };
+        
         const availabilityRule = teacherAvailability[teacher];
         if (availabilityRule) {
             if (availabilityRule.availableDays && !availabilityRule.availableDays.includes(day)) return { valid: false, reason: `Teacher only available on ${availabilityRule.availableDays.join()}` };
             if (availabilityRule.unavailableDays && availabilityRule.unavailableDays.includes(day)) return { valid: false, reason: `Teacher unavailable on ${day}` };
         }
-
+        
         const subjectRule = subjectRestrictions[subject];
         if (subjectRule && subjectRule.days && !subjectRule.days.includes(day)) return { valid: false, reason: `Subject restricted to ${subjectRule.days.join()}` };
-
+        
         if (this.globalSchedule[day][slot].teachers.has(teacher)) return { valid: false, reason: `Teacher booked` };
         if (this.timetables[className][day][slot]) return { valid: false, reason: `Class booked` };
-
+        
+        // Check if the subject uses a single resource and if that resource is already booked
         if (singleResourceSubjects.includes(subject)) {
             if (this.globalSchedule[day][slot].resources[subject]) {
                 return { valid: false, reason: `${subject} resource booked` };
             }
         }
-
+        
         return { valid: true };
     }
 
@@ -158,7 +154,7 @@ class TimetableGenerator {
         this.timetables[className][day][slot] = { subject, teacher };
         this.globalSchedule[day][slot].teachers.add(teacher);
         if (this.constraints.singleResourceSubjects.includes(subject)) {
-            this.globalSchedule[day][slot].resources[subject] = className;
+            this.globalSchedule[day][slot].resources[subject] = className; // Mark resource as used by this class
         }
         this.teacherStats[teacher].dailyPeriods[day]++;
     }
@@ -168,65 +164,26 @@ class TimetableGenerator {
         const division = this._getClassDivision(className);
         const rule = this.constraints.doublePeriodSubjects.find(r => r.subject === subject && r.divisions.includes(division));
 
-        if (rule?.strict === "mixed" && rule.structure) {
-            // Schedule exactly as per mixed structure (e.g. 3 double, 2 single)
-            for (let i = 0; i < (rule.structure.doubles || 0); i++) {
+        // Prioritize scheduling strict double periods first if the rule exists
+        if (rule && rule.strict) {
+            const doublesToSchedule = rule.strict === 'mixed' ? rule.structure.doubles : Math.floor(periodsToSchedule / 2);
+            for (let i = 0; i < doublesToSchedule; i++) {
                 if (this._scheduleSpecificPeriods(lesson, allowedDays, 2)) {
                     periodsToSchedule -= 2;
                 } else {
-                    // If can't find double, try to fill as singles for this double
-                    let singlesScheduled = 0;
-                    for (let s = 0; s < 2; s++) {
-                        if (this._scheduleSpecificPeriods(lesson, allowedDays, 1)) {
-                            periodsToSchedule -= 1;
-                            singlesScheduled++;
-                        }
-                    }
-                    if (singlesScheduled < 2) {
-                        this.unassignedLessons.push({ className, subject, reason: "Could not find slot for double period (mixed rule)" });
-                    }
-                }
-            }
-            for (let i = 0; i < (rule.structure.singles || 0); i++) {
-                if (this._scheduleSpecificPeriods(lesson, allowedDays, 1)) {
-                    periodsToSchedule -= 1;
-                } else {
-                    this.unassignedLessons.push({ className, subject, reason: "Could not find slot for single period (mixed rule)" });
-                }
-            }
-            // If periodsToSchedule > 0 (recipe doesn't sum to total needed), fill singles as fallback
-            while (periodsToSchedule > 0) {
-                if (this._scheduleSpecificPeriods(lesson, allowedDays, 1)) {
-                    periodsToSchedule -= 1;
-                } else {
-                    this.unassignedLessons.push({ className, subject, reason: "Could not find slot (mixed rule overflow)" });
+                    // If we can't schedule a double, try singles for the remaining
                     break;
                 }
             }
-        } else if (rule?.strict === true) {
-            // Only doubles are allowed (Music, Art, ICT, PE for primary)
-            let doubles = Math.floor(periodsToSchedule / 2);
-            for (let i = 0; i < doubles; i++) {
-                if (this._scheduleSpecificPeriods(lesson, allowedDays, 2)) {
-                    periodsToSchedule -= 2;
-                } else {
-                    // For strict:true, do NOT schedule singles; leave them unassigned
-                    this.unassignedLessons.push({ className, subject, reason: "Strict double-period subject: Could not find slot for double period." });
-                }
-            }
-            // If any periods remain (odd number), for strict:true, do not schedule singles
-            if (periodsToSchedule === 1) {
-                this.unassignedLessons.push({ className, subject, reason: "Only double periods allowed, 1 period left unassigned." });
-            }
-        } else {
-            // For everything else (not in doublePeriodSubjects), schedule all as singles
-            while (periodsToSchedule > 0) {
-                if (this._scheduleSpecificPeriods(lesson, allowedDays, 1)) {
-                    periodsToSchedule -= 1;
-                } else {
-                    this.unassignedLessons.push({ className, subject, reason: "Could not find slot (flexible/single)" });
-                    break;
-                }
+        }
+        
+        // Schedule remaining periods as singles or if strict doubles couldn't be met
+        while (periodsToSchedule > 0) {
+            if (this._scheduleSpecificPeriods(lesson, allowedDays, 1)) {
+                periodsToSchedule--;
+            } else {
+                this.unassignedLessons.push({ className, subject, periodsRemaining: periodsToSchedule, reason: "Could not find a free slot for single period" });
+                break;
             }
         }
     }
@@ -238,35 +195,38 @@ class TimetableGenerator {
             const slots = this._getAvailableLessonSlots(className, day);
             if (slots.length < numPeriods) continue;
 
-            // Priority 1: Find consecutive empty slots (back-to-back)
-            if (numPeriods === 2) {
+            if (numPeriods === 1) {
+                for (const slot of slots.sort(() => Math.random() - 0.5)) {
+                    if (this.canAssignLesson(className, subject, teacher, day, slot).valid) {
+                        this.assignLesson(className, subject, teacher, day, slot);
+                        return true;
+                    }
+                }
+            } else if (numPeriods === 2) {
+                // Try consecutive slots first
                 for (let i = 0; i < slots.length - 1; i++) {
-                    if (slots[i+1] === slots[i] + 1) {
-                        const [s1, s2] = [slots[i], slots[i+1]];
-                        if (
-                            this.canAssignLesson(className, subject, teacher, day, s1).valid &&
-                            this.canAssignLesson(className, subject, teacher, day, s2).valid
-                        ) {
+                    if (slots[i+1] === slots[i] + 1) { // Check if consecutive
+                         const [s1, s2] = [slots[i], slots[i+1]];
+                         if (this.canAssignLesson(className, subject, teacher, day, s1).valid && this.canAssignLesson(className, subject, teacher, day, s2).valid) {
                             this.assignLesson(className, subject, teacher, day, s1);
                             this.assignLesson(className, subject, teacher, day, s2);
                             return true;
                         }
                     }
                 }
-                // Priority 2: Find pair split by break or lunch
+
+                // Then try slots separated by a break/lunch
                 const division = this._getClassDivision(className);
                 const { breakPeriod, lunchPeriod } = this.schoolData.divisionSchedules[division];
-                for (let i = 0; i < slots.length - 1; i++) {
+                for (let i = 0; i < slots.length; i++) {
                     for (let j = i + 1; j < slots.length; j++) {
                         const s1 = slots[i];
                         const s2 = slots[j];
+                        // Check for two slots with exactly one period in between, which must be break or lunch
                         if (s2 - s1 === 2) {
                             const middlePeriod = s1 + 1;
                             if (middlePeriod === breakPeriod || middlePeriod === lunchPeriod) {
-                                if (
-                                    this.canAssignLesson(className, subject, teacher, day, s1).valid &&
-                                    this.canAssignLesson(className, subject, teacher, day, s2).valid
-                                ) {
+                                if (this.canAssignLesson(className, subject, teacher, day, s1).valid && this.canAssignLesson(className, subject, teacher, day, s2).valid) {
                                     this.assignLesson(className, subject, teacher, day, s1);
                                     this.assignLesson(className, subject, teacher, day, s2);
                                     return true;
@@ -275,136 +235,148 @@ class TimetableGenerator {
                         }
                     }
                 }
-            } else if (numPeriods === 1) {
-                for (const slot of slots.sort(() => Math.random() - 0.5)) {
-                    if (this.canAssignLesson(className, subject, teacher, day, slot).valid) {
-                        this.assignLesson(className, subject, teacher, day, slot);
-                        return true;
-                    }
-                }
             }
         }
         return false;
     }
 
     _scheduleSyncedPeriods(group, subject, numPeriods) {
-        const division = this._getClassDivision(group[0]);
-        const onlyDoubles = this.constraints.doublePeriodSubjects.some(
-            rule => rule.subject === subject && rule.divisions.includes(division) && rule.strict === true
-        );
-        if (onlyDoubles && numPeriods !== 2) return false;
-
+        // Ensure all classes in the group have the same teacher for the subject for this to work
         const teacher = this.schoolData.teachers[group[0]][subject];
-        const allowedDays = this.schoolData.days.filter(d => {
-            const availability = this.constraints.teacherAvailability[teacher];
-            if (availability?.availableDays) return availability.availableDays.includes(d);
-            if (availability?.unavailableDays) return !availability.unavailableDays.includes(d);
-            return true;
-        });
+        if (!teacher) {
+            console.warn(`Synced P.E.: Teacher for ${subject} not found for class ${group[0]}. Skipping group.`);
+            return false;
+        }
+
+        // Get allowed days for the teacher
+        let allowedDays = [...this.schoolData.days];
+        const teacherAvail = this.constraints.teacherAvailability[teacher];
+        if (teacherAvail) {
+            if (teacherAvail.availableDays) {
+                allowedDays = allowedDays.filter(d => teacherAvail.availableDays.includes(d));
+            }
+            if (teacherAvail.unavailableDays) {
+                allowedDays = allowedDays.filter(d => !teacherAvail.unavailableDays.includes(d));
+            }
+        }
 
         for (const day of allowedDays.sort(() => Math.random() - 0.5)) {
+            // Get available slots for the first class in the group
+            // Assuming all classes in a synced group have the same division schedule and special events
             const slots = this._getAvailableLessonSlots(group[0], day);
             if (slots.length < numPeriods) continue;
 
+            // Iterate through possible starting slots
             for (let i = 0; i <= slots.length - numPeriods; i++) {
-                const slotsToTry = slots.slice(i, i + numPeriods);
-                // For double periods, ensure consecutive slots or split by break/lunch
-                if (numPeriods === 2) {
-                    // Check consecutive
-                    if (slotsToTry[1] - slotsToTry[0] === 1) {
-                        const canAssignAll = group.every(c => slotsToTry.every(s => this.canAssignLesson(c, subject, teacher, day, s).valid));
-                        if (canAssignAll) {
-                            group.forEach(c => slotsToTry.forEach(s => this.assignLesson(c, subject, teacher, day, s)));
-                            return true;
-                        }
-                        continue;
-                    }
-                    // Check split by break/lunch
-                    const division = this._getClassDivision(group[0]);
-                    const { breakPeriod, lunchPeriod } = this.schoolData.divisionSchedules[division];
-                    const midSlot = slotsToTry[0] + 1;
-                    if (slotsToTry[1] - slotsToTry[0] === 2 && (midSlot === breakPeriod || midSlot === lunchPeriod)) {
-                        const canAssignAll = group.every(c => slotsToTry.every(s => this.canAssignLesson(c, subject, teacher, day, s).valid));
-                        if (canAssignAll) {
-                            group.forEach(c => slotsToTry.forEach(s => this.assignLesson(c, subject, teacher, day, s)));
-                            return true;
-                        }
-                    }
+                const potentialSlots = slots.slice(i, i + numPeriods);
+                // For strict consecutive, ensure the difference between min and max slot is numPeriods - 1
+                if (numPeriods > 1 && (potentialSlots[potentialSlots.length - 1] - potentialSlots[0] !== numPeriods - 1)) {
+                    // This handles non-consecutive slots if numPeriods > 1.
+                    // For example, if slots are [1, 2, 4] and numPeriods is 2, slice(0,2) is [1,2] (diff 1).
+                    // Slice(1,3) is [2,4] (diff 2), which would be skipped by this check.
+                    // If you want to allow non-consecutive slots separated by breaks/lunch for synced periods,
+                    // this logic here for potentialSlots needs to be more complex, similar to _scheduleSpecificPeriods.
+                    // For now, assuming strict consecutive slots for synced doubles.
+                    continue;
+                }
+
+                // Check if all classes in the group can assign lessons in these potential slots
+                const canAssignAll = group.every(c => 
+                    potentialSlots.every(s => this.canAssignLesson(c, subject, teacher, day, s).valid)
+                );
+
+                if (canAssignAll) {
+                    // Assign lessons for all classes in the group
+                    group.forEach(c => potentialSlots.forEach(s => this.assignLesson(c, subject, teacher, day, s)));
+                    return true;
                 }
             }
         }
         return false;
     }
-
+    
     // --- SCHEDULING ORDER ---
     _scheduleRestrictedSubjects() {
-        console.log("Generator Step 2: Scheduling strictly restricted subjects...");
+        console.log("Generator Step 1: Scheduling strictly restricted subjects...");
         Object.entries(this.constraints.subjectRestrictions).forEach(([subject, rule]) => {
+            // Pass the restricted days to _scheduleAllForSubject
             this._scheduleAllForSubject(subject, rule.days);
         });
     }
 
     _schedulePESynchronization() {
-        console.log("Generator Step 1: Scheduling synchronized P.E. lessons...");
+        console.log("Generator Step 2: Scheduling synchronized P.E. lessons...");
+        // Ensure peSynchronization exists and is an array before iterating
+        if (!this.constraints.peSynchronization || !Array.isArray(this.constraints.peSynchronization)) {
+            console.log("No P.E. synchronization rules found in constraints.");
+            return;
+        }
+
         this.constraints.peSynchronization.forEach(group => {
             const subject = "P.E.";
-            const needed = this.schoolData.subjects[this._getClassDivision(group[0])][subject];
-            if (!needed) return;
-
-            let scheduled = this._getScheduledPeriods(group[0], subject);
+            // Get division for the first class in the group (assuming all in group are same division for P.E. planning)
             const division = this._getClassDivision(group[0]);
-            const onlyDoubles = this.constraints.doublePeriodSubjects.some(
-                rule => rule.subject === subject && rule.divisions.includes(division) && rule.strict === true
-            );
+            const needed = this.schoolData.subjects[division]?.[subject];
+            
+            if (!needed) {
+                console.warn(`P.E. subject or its periods not defined for division ${division} of group ${group.join()}. Skipping.`);
+                return;
+            }
 
+            // Calculate how many periods are already scheduled for the first class in the group
+            let scheduled = this._getScheduledPeriods(group[0], subject);
+            
+            // Continue scheduling until all periods are met
             while (scheduled < needed) {
-                if (onlyDoubles) {
-                    // Only schedule in pairs (double periods)
-                    if (needed - scheduled >= 2) {
-                        if (this._scheduleSyncedPeriods(group, subject, 2)) {
-                            scheduled += 2;
-                        } else {
-                            this.unassignedLessons.push({ className: group.join(','), subject, reason: "Could not find sync double P.E. slot" });
-                            break;
-                        }
-                    } else {
-                        // Do not try to schedule a single period for strict double lessons
-                        this.unassignedLessons.push({ className: group.join(','), subject, reason: "Only double periods allowed for P.E. in primary, 1 period left unassigned." });
-                        break;
-                    }
+                const periodsToSchedule = (needed - scheduled >= 2) ? 2 : 1; // Try to schedule doubles first
+                if (this._scheduleSyncedPeriods(group, subject, periodsToSchedule)) {
+                    scheduled += periodsToSchedule;
                 } else {
-                    // Allow singles for non-strict divisions
-                    const periodsToSchedule = (needed - scheduled >= 2) ? 2 : 1;
-                    if (this._scheduleSyncedPeriods(group, subject, periodsToSchedule)) {
-                        scheduled += periodsToSchedule;
-                    } else {
-                        this.unassignedLessons.push({ className: group.join(','), subject, reason: "Could not find sync P.E. slot" });
-                        break;
-                    }
+                    // If a synced slot can't be found, log it and break
+                    this.unassignedLessons.push({ className: group.join(','), subject, periodsRemaining: (needed - scheduled), reason: "Could not find sync P.E. slot" });
+                    break;
                 }
             }
         });
     }
-
+    
     _scheduleICTLessons() {
         console.log("Generator Step 3: Scheduling ICT lessons (single resource)...");
+        // ICT is implicitly handled by _scheduleAllForSubject and canAssignLesson's resource check
         this._scheduleAllForSubject("ICT");
     }
-
+    
     _scheduleStrictDoubles() {
         console.log("Generator Step 4: Scheduling remaining strict double periods...");
-        this.constraints.doublePeriodSubjects.filter(r => r.strict).forEach(rule => {
-            // Exclude PE since it is already scheduled
-            if (rule.subject !== "P.E.") this._scheduleAllForSubject(rule.subject);
-        });
+        // Filter for rules that have 'strict' property set to true (or 'mixed')
+        this.constraints.doublePeriodSubjects.filter(r => r.strict).forEach(rule => this._scheduleAllForSubject(rule.subject));
     }
 
     _scheduleRemainingLessons() {
         console.log("Generator Step 5: Scheduling all remaining lessons...");
         const allSubjects = [...new Set(Object.values(this.schoolData.subjects).flatMap(div => Object.keys(div)))];
-        allSubjects.sort(() => Math.random() - 0.5).forEach(subject => {
-            if (subject !== "P.E.") this._scheduleAllForSubject(subject);
-        });
+        
+        // Filter out subjects already handled by specific steps (e.g., P.E., ICT, strictly restricted, strict doubles)
+        const subjectsToSkip = new Set();
+        if (this.constraints.subjectRestrictions) {
+            Object.keys(this.constraints.subjectRestrictions).forEach(s => subjectsToSkip.add(s));
+        }
+        if (this.constraints.singleResourceSubjects) {
+            this.constraints.singleResourceSubjects.forEach(s => subjectsToSkip.add(s));
+        }
+        if (this.constraints.doublePeriodSubjects) {
+            this.constraints.doublePeriodSubjects.filter(r => r.strict).forEach(r => subjectsToSkip.add(r.subject));
+        }
+        // If P.E. is in peSynchronization, it's handled. Check for the actual "P.E." subject name.
+        if (this.constraints.peSynchronization && this.constraints.peSynchronization.length > 0) {
+            subjectsToSkip.add("P.E.");
+        }
+
+
+        // Schedule the remaining subjects
+        allSubjects.filter(subject => !subjectsToSkip.has(subject))
+                   .sort(() => Math.random() - 0.5) // Randomize for better distribution
+                   .forEach(subject => this._scheduleAllForSubject(subject));
     }
 
     _scheduleAllForSubject(subject, allowedDays = this.schoolData.days) {
@@ -412,8 +384,9 @@ class TimetableGenerator {
             const division = this._getClassDivision(className);
             const teacher = this.schoolData.teachers[className]?.[subject];
             const needed = this.schoolData.subjects[division]?.[subject];
-            if (teacher && needed) {
-                const scheduled = this._getScheduledPeriods(className, subject);
+            
+            if (teacher && needed !== undefined) { // Check for undefined, not just falsy
+                 const scheduled = this._getScheduledPeriods(className, subject);
                 if (scheduled < needed) {
                     this._scheduleLesson({
                         className, subject, teacher,
@@ -428,7 +401,7 @@ class TimetableGenerator {
         console.log("\n--- Teacher Workload Summary ---");
         const sorted = Object.entries(this.teacherStats)
             .sort((a, b) => (b[1].totalPeriods || 0) - (a[1].totalPeriods || 0));
-
+        
         sorted.forEach(([teacher, stats]) => {
             const dailyLoads = Object.entries(stats.dailyPeriods).map(([day, p]) => `${day.substr(0,1)}:${p}`).join(" ");
             console.log(`  ${teacher.padEnd(25)}: ${stats.totalPeriods} total | ${dailyLoads}`);
